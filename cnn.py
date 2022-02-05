@@ -94,7 +94,7 @@ def load_mnist_data():
     y_valid = nparray_head_or_tail(y_test, 5000, "head")
     y_test = nparray_head_or_tail(y_test, 5000, "tail")
 
-    print(nparray_head_or_tail(y_test, 5, "tail"))
+    # print(nparray_head_or_tail(y_test, 5, "tail"))
 
     return X_train, y_train, X_valid, y_valid, X_test, y_test
 
@@ -126,7 +126,7 @@ class ConvLayer:
         """ 
         return np.sum(input_section * W, axis=None)
     
-    def convolve(self, X, W, b):
+    def forward(self, X, W=None, b=None):
         """
         Performs convolution using self.stride
         :param X: Input array, shape = (batch_size, height, width, num_channels)
@@ -134,22 +134,30 @@ class ConvLayer:
         :param b: Filter bias, shape = (num_channels,)
         :return: Output of convolution, shape = (batch_size, height, width, num_channels)
         """
+        W = np.random.randn(self.filter_dim, self.filter_dim, self.num_channels)
+        print("X shape: ", X.shape, "W shape: ", W.shape)
+        b = np.random.randn(self.num_channels)
+
+        out_dimension1 = int(np.floor((X.shape[1] + 2 * self.padding - self.filter_dim) / self.stride)) + 1
+        out_dimension2 = int(np.floor((X.shape[2] + 2 * self.padding - self.filter_dim) / self.stride)) + 1
+        output = np.zeros((X.shape[0], out_dimension1, out_dimension2, self.num_channels))
+        print("output shape: ", output.shape)
+
         X_padded = self.pad_input(X)
-        output = np.zeros(X_padded.shape)
-        for i in range(0, X_padded.shape[1] - self.filter_dim + 1, self.stride):
-            for j in range(0, X_padded.shape[2] - self.filter_dim + 1, self.stride):
-                input_section = X_padded[:, i:i + self.filter_dim, j:j + self.filter_dim, :]
-                # temp = self.convolve_single_pass(input_section, W)
-                # # print(temp)
-                output[:, i:i + self.filter_dim, j:j + self.filter_dim, :] += self.convolve_single_pass(input_section, W) + b
-        return output
+        for i in range(out_dimension1):
+            for j in range(out_dimension2):
+                output[:, i, j, :] = self.convolve_single_pass(X_padded[:, i * self.stride:i * self.stride + self.filter_dim, j * self.stride:j * self.stride + self.filter_dim, :], W) + b
+        
+        return output  
+    def __str__(self) -> str:
+        return "ConvLayer(num_channels={}, filter_dim={}, stride={}, padding={})".format(self.num_channels, self.filter_dim, self.stride, self.padding)
         
 
 class ReluLayer:
     def __init__(self):
         pass
 
-    def forward(self, X):
+    def forward(self, X, W=None, b=None):
         """
         Performs forward pass.
         :param X: Input array, shape = (batch_size, height, width, num_channels)
@@ -166,14 +174,15 @@ class ReluLayer:
         """
         return dX * (X > 0)
 
-
+    def __str__(self) -> str:
+        return "ReluLayer()"
 
 class MaxPoolingLayer:
     def __init__(self, filter_dim, stride):
         self.filter_dim = filter_dim
         self.stride = stride
 
-    def max_pool(self, X):
+    def forward(self, X, W=None, b=None):
         """
         Performs max pooling using self.stride
         :param X: Input array, shape = (batch_size, height, width, num_filters)
@@ -189,41 +198,73 @@ class MaxPoolingLayer:
                     X[:, i:i + self.filter_dim, j:j + self.filter_dim, :], axis=None)
         return output
 
+    def __str__(self) -> str:
+        return "MaxPoolingLayer(filter_dim={}, stride={})".format(self.filter_dim, self.stride)
+
 class FullyConnectedLayer:
     def __init__(self, output_dim):
         self.output_dim = output_dim
 
     # forward propagation method of fully-connected layer, taking batch_size as input
-    def forward(self, X, W, b):
+    def forward(self, X, W=None, b=None):
         """
         :param X: flattened input (1, num_inputs)
         :param W: weights, shape = (num_inputs, num_outputs)
         :param b: bias, shape = (num_outputs,)
         :return: output data, shape = (batch_size, self.output_dim)
         """
+        W = np.random.randn(self.filter_dim, self.filter_dim, self.num_channels)
+        b = np.random.randn(self.num_channels)
+
         return np.dot(X, W) + b
+
+    def __str__(self) -> str:
+        return "FullyConnectedLayer(output_dim={})".format(self.output_dim)
 
 class SoftmaxLayer:
     def __init__(self):
         pass
 
-    def forward(self, X):
+    def forward(self, X, W=None, b=None):
         """
         :param X: flattened input (1, num_inputs)
         :return: output data, shape = (batch_size, self.output_dim)
         """
         return np.exp(X) / np.sum(np.exp(X), axis=1, keepdims=True)
     
-    def backward(self, X, dX):
-        """
-        :param X: flattened input (1, num_inputs)
-        :param dX: gradient of loss with respect to output of forward pass
-        :return: gradient of loss with respect to input of forward pass
-        """
-        return dX * (X / np.sum(X, axis=1, keepdims=True))
+    def __str__(self) -> str:
+        return "SoftmaxLayer()"
 
+def softmax_array(X):
+    """
+    :param X: flattened input (1, num_inputs)
+    :return: output data, shape = (batch_size, self.output_dim)
+    """
+    return np.exp(X) / np.sum(np.exp(X), axis=1, keepdims=True)
 
-def flatten_array(X):
+class FlattenLayer:
+    def __init__(self):
+        pass
+
+    def forward(self, X, W=None, b=None):
+        """
+        :param X: input data, shape = (ANY) --- total num_inputs data 
+        :return: output data, shape = (1, num_inputs)
+        """
+        return X.reshape(1, -1)
+    
+    # def backward(self, X, dL_dout):
+    #     """
+    #     :param X: input data, shape = (1, num_inputs)
+    #     :param dL_dout: gradient of loss with respect to output of this layer, shape = (1, num_inputs)
+    #     :return: gradient of loss with respect to input of this layer, shape = (1, num_inputs)
+    #     """
+    #     return dL_dout.reshape(X.shape)
+    
+    def __str__(self) -> str:
+        return "FlattenLayer()"
+
+def flatten_array( X):
     """
     :param X: input data, shape = (ANY) --- total num_inputs data 
     :return: output data, shape = (1, num_inputs)
@@ -294,16 +335,27 @@ def build_model():
         layers = []
         for line in lines:
             if line.startswith('Conv'):
-                layer = ConvLayer(int(line.split(' ')[1]), int(line.split(' ')[2]), int(line.split(' ')[3]))
+                num_channels = int(line.split(' ')[1])
+                filter_dim = int(line.split(' ')[2])
+                stride = int(line.split(' ')[3])
+                padding = int(line.split(' ')[4])
+                layer = ConvLayer(num_channels, filter_dim, stride, padding)                
                 layers.append(layer)
             elif line.startswith('ReLU'):
                 layer = ReluLayer()
                 layers.append(layer)
             elif line.startswith('Pool'):
-                layer = MaxPoolingLayer(int(line.split(' ')[1]), int(line.split(' ')[2]))
+                filter_dim = int(line.split(' ')[1])
+                stride = int(line.split(' ')[2])
+                layer = MaxPoolingLayer(filter_dim, stride)                
                 layers.append(layer)
             elif line.startswith('FC'):
-                layer = FullyConnectedLayer(int(line.split(' ')[1]))
+                # add a flatten layer first
+                layer = FlattenLayer()
+                layers.append(layer)
+                # then add a fully connected layer
+                num_outputs = int(line.split(' ')[1])
+                layer = FullyConnectedLayer(num_outputs)
                 layers.append(layer)
             elif line.startswith('Softmax'):
                 layer = SoftmaxLayer()
@@ -311,34 +363,62 @@ def build_model():
             else:
                 print('Unknown layer type')
                 return
+        return layers
+
+# main function
+if __name__ == '__main__':
+    # load mnist data
+    X_train, y_train, X_valid, y_valid, X_test, y_test = load_mnist_data()
+    batches = generate_batches(X_train, y_train)
+    # build model
+    layers = build_model()
+    
+    # train model for first batch
+    batch_x, batch_y = batches[0]
+    for layer in layers:
+        print("input shape: ", batch_x.shape)
+        print_g(layer)
+        batch_x = layer.forward(batch_x)
+        print_m(f"output shape: {batch_x.shape}")
+    y_hat = batch_x
+    print(y_hat.shape)
     
 
+    # # train model
+    # for batch in batches:
+    #     X, y = batch
+    #     for layer in layers:
+    #         y_hat = layer.forward(X)
+    #         print(y_hat.shape)
+        
 
+"""     All unit tests go here 
 
-# X_train, y_train, X_valid, y_valid, X_test, y_test = load_mnist_data()
-# batches = generate_batches(X_train, y_train)
-# print(X_train.shape[0])
-# print(len(batches))
+# test generate_batches function
+X_train, y_train, X_valid, y_valid, X_test, y_test = load_mnist_data()
+batches = generate_batches(X_train, y_train)
+print(X_train.shape[0])
+print(len(batches))
 
 # test ConvLayer pad_input function
 X = np.random.randn(2, 3, 3, 1)
 conv_layer = ConvLayer(1, 3, 1, 1)
-# print_m(X.shape)
-# print_g(conv_layer.pad_input(X).shape)
+print_m(X.shape)
+print_g(conv_layer.pad_input(X).shape)
 
 # test ConvLayer convolve function
 X = np.random.randn(2, 3, 3, 1)
 W = np.random.randn(3, 3, 1)
 conv_layer = ConvLayer(1, 3, 1, 1)
-# print_m(X)
-# print_g(W)
-# print_m(conv_layer.convolve(X, W, 0))
+print_m(X)
+print_g(W)
+print_m(conv_layer.convolve(X, W, 0))
 
 # test PoolingLayer max_pool function
 X = np.random.randn(4, 28, 28, 2)
 pool_layer = MaxPoolingLayer(2, 2)
-# print_m(X)
-# print_g(pool_layer.max_pool(X).shape)
+print_m(X)
+print_g(pool_layer.max_pool(X).shape)
 
 # test FullyConnectedLayer forward function after flattening
 X = np.random.randn(2, 3)
@@ -347,21 +427,23 @@ print(X.shape)
 W = np.random.randn(6, 4)
 b = np.random.randn(4)
 fc_layer = FullyConnectedLayer(4)
-# print_m(X)
-# print_g(W)
-# print_g(b)
-# print_g(fc_layer.forward(X, W, b))
+print_m(X)
+print_g(W)
+print_g(b)
+print_g(fc_layer.forward(X, W, b))
 
-# test Softmax function
+# test softmax_array function
 X = np.random.randn(2, 3)
 X = flatten_array(X)
-# print(X.shape)
-# print_g(Softmax(X))
+print(X.shape)
+print_g(softmax_array(X))
 
 # test cross_entropy_loss function
 y = np.array([[0, 1, 0]])
 y_hat = np.array([[0.1, 0.9, 0.1]])
 print_g(cross_entropy_loss(y, y_hat))
+
+"""
 
 
 
