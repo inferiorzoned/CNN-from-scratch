@@ -120,12 +120,14 @@ class ConvLayer:
     def convolve_single_pass(self, input_section, W):
         """
         Performs a single pass of convolution.
-        :param input_section: Input section, shape = (filter_dim, filter_dim, num_channels)
-        :param W: Filter weights, shape = (filter_dim, filter_dim, num_channels)
-        :return: Output of convolution, shape = (filter_dim, filter_dim, num_channels)
+        :param input_section: Input section, shape = (filter_dim, filter_dim, num_channels_of_input)
+        :param W: Filter weights, shape = (filter_dim, filter_dim, num_channels_of_output)
+        :return: Output of convolution, shape = (filter_dim, filter_dim, num_channels_of_output)
         """ 
-        return np.sum(input_section * W, axis=None)
-    
+        # print("input_section.shape: ", input_section.shape, "W.shape: ", W.shape)
+        # print("mult shape: ", (input_section*W).shape)
+        return np.sum(np.multiply(input_section, W), axis=None)
+
     def forward(self, X, W=None, b=None):
         """
         Performs convolution using self.stride
@@ -134,19 +136,27 @@ class ConvLayer:
         :param b: Filter bias, shape = (num_channels,)
         :return: Output of convolution, shape = (batch_size, height, width, num_channels)
         """
-        W = np.random.randn(self.filter_dim, self.filter_dim, self.num_channels)
+        W = np.random.randn(self.filter_dim, self.filter_dim, X.shape[3], self.num_channels)
         print("X shape: ", X.shape, "W shape: ", W.shape)
         b = np.random.randn(self.num_channels)
 
         out_dimension1 = int(np.floor((X.shape[1] + 2 * self.padding - self.filter_dim) / self.stride)) + 1
         out_dimension2 = int(np.floor((X.shape[2] + 2 * self.padding - self.filter_dim) / self.stride)) + 1
         output = np.zeros((X.shape[0], out_dimension1, out_dimension2, self.num_channels))
-        print("output shape: ", output.shape)
+        # print("output shape: ", output.shape)
 
         X_padded = self.pad_input(X)
-        for i in range(out_dimension1):
-            for j in range(out_dimension2):
-                output[:, i, j, :] = self.convolve_single_pass(X_padded[:, i * self.stride:i * self.stride + self.filter_dim, j * self.stride:j * self.stride + self.filter_dim, :], W) + b
+
+        for i in range(output.shape[0]):
+            for j in range(output.shape[1]):
+                for k in range(output.shape[2]):
+                    for l in range(output.shape[3]):
+                        input_section = X_padded[i, j*self.stride:j*self.stride+self.filter_dim, k*self.stride:k*self.stride+self.filter_dim, :]
+                        output[i, j, k, l] = self.convolve_single_pass(input_section, W[:, :, :, l]) + b[l]
+
+        # for i in range(out_dimension1):
+        #     for j in range(out_dimension2):
+        #         output[:, i, j, :] = self.convolve_single_pass(X_padded[:, i * self.stride:i * self.stride + self.filter_dim, j * self.stride:j * self.stride + self.filter_dim, :], W) + b
         
         return output  
     def __str__(self) -> str:
@@ -213,8 +223,8 @@ class FullyConnectedLayer:
         :param b: bias, shape = (num_outputs,)
         :return: output data, shape = (batch_size, self.output_dim)
         """
-        W = np.random.randn(self.filter_dim, self.filter_dim, self.num_channels)
-        b = np.random.randn(self.num_channels)
+        W = np.random.randn(X.shape[1], self.output_dim)
+        b = np.random.randn(self.output_dim)
 
         return np.dot(X, W) + b
 
@@ -229,8 +239,25 @@ class SoftmaxLayer:
         """
         :param X: flattened input (1, num_inputs)
         :return: output data, shape = (batch_size, self.output_dim)
-        """
-        return np.exp(X) / np.sum(np.exp(X), axis=1, keepdims=True)
+        """        
+        # return np.exp(X) / np.sum(np.exp(X))
+        # return np.exp(X) / np.sum(np.exp(X), axis=1, keepdims=True)
+
+        # exp = np.exp(X - np.max(X, axis=1, keepdims=True))
+        # self.output = exp / np.sum(exp, axis=1, keepdims=True)
+        # return exp / np.sum(exp, axis=1, keepdims=True)
+
+         # stable softmax
+        N = X.shape[0]
+        X = X - np.max(X, axis=1, keepdims=True)
+        numerator = np.exp(X)
+        probs = numerator / np.sum(numerator, axis=1, keepdims=True)
+        
+        # compute loss
+        # loss = -np.sum(np.log(probs[np.arange(N), y])) / N
+        # print(loss)
+
+        return probs
     
     def __str__(self) -> str:
         return "SoftmaxLayer()"
@@ -251,7 +278,8 @@ class FlattenLayer:
         :param X: input data, shape = (ANY) --- total num_inputs data 
         :return: output data, shape = (1, num_inputs)
         """
-        return X.reshape(1, -1)
+        # return X.reshape(1, -1)
+        return X.reshape(X.shape[0], -1)
     
     # def backward(self, X, dL_dout):
     #     """
@@ -277,11 +305,7 @@ def cross_entropy_loss(y, y_hat):
     :param y_hat: predicted label, shape = (1, num_classes)
     :return: loss, shape = (1,)
     """
-    # find where y is 1
-    idx = np.where(y == 1)[1]
-    print_m(y_hat[0, idx])
-    return -np.log(y_hat[0, idx])
-    # return -np.sum(y * np.log(y_hat))
+    return -np.sum(y * np.log(y_hat))
 
 def generate_batches(X, y, batch_size=32):
     """
@@ -365,31 +389,42 @@ def build_model():
                 return
         return layers
 
+def forward_pass(X, layers):
+    for layer in layers:
+        X = layer.forward(X)
+    return X
+
 # main function
 if __name__ == '__main__':
     # load mnist data
     X_train, y_train, X_valid, y_valid, X_test, y_test = load_mnist_data()
-    batches = generate_batches(X_train, y_train)
+    batches = generate_batches(X_train, y_train, 32)
     # build model
     layers = build_model()
     
     # train model for first batch
-    batch_x, batch_y = batches[0]
-    for layer in layers:
-        print("input shape: ", batch_x.shape)
-        print_g(layer)
-        batch_x = layer.forward(batch_x)
-        print_m(f"output shape: {batch_x.shape}")
-    y_hat = batch_x
-    print(y_hat.shape)
+    # batch_x, batch_y = batches[0]
+    # for layer in layers:
+    #     # print("input shape: ", batch_x.shape)
+    #     # print_g(layer)
+    #     batch_x = layer.forward(batch_x)
+    #     # print_m(f"output shape: {batch_x.shape}")
+    # y_hat = batch_x
+    # print(y_hat)
+    # print_m(batch_y)
+    # print(cross_entropy_loss(batch_y, y_hat))
     
 
     # # train model
-    # for batch in batches:
-    #     X, y = batch
-    #     for layer in layers:
-    #         y_hat = layer.forward(X)
-    #         print(y_hat.shape)
+    for batch in batches:
+        X, y = batch
+        y_hat = forward_pass(X, layers)
+        # y_new = 
+            # run backward
+            # dL_dout = layer.backward(X, y_hat)
+        
+
+
         
 
 """     All unit tests go here 
