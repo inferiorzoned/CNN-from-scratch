@@ -136,9 +136,11 @@ class ConvLayer:
         :param b: Filter bias, shape = (num_channels,)
         :return: Output of convolution, shape = (batch_size, height, width, num_channels)
         """
-        W = np.random.randn(self.filter_dim, self.filter_dim, X.shape[3], self.num_channels)
+        # W = np.random.randn(self.filter_dim, self.filter_dim, X.shape[3], self.num_channels)
+        W = np.random.normal(0.0, 0.01, (self.filter_dim, self.filter_dim, X.shape[3], self.num_channels))
         print("X shape: ", X.shape, "W shape: ", W.shape)
-        b = np.random.randn(self.num_channels)
+        # b = np.random.randn(self.num_channels)
+        b = np.zeros((self.num_channels))
 
         out_dimension1 = int(np.floor((X.shape[1] + 2 * self.padding - self.filter_dim) / self.stride)) + 1
         out_dimension2 = int(np.floor((X.shape[2] + 2 * self.padding - self.filter_dim) / self.stride)) + 1
@@ -223,8 +225,10 @@ class FullyConnectedLayer:
         :param b: bias, shape = (num_outputs,)
         :return: output data, shape = (batch_size, self.output_dim)
         """
-        W = np.random.randn(X.shape[1], self.output_dim)
-        b = np.random.randn(self.output_dim)
+        # W = np.random.randn(X.shape[1], self.output_dim)
+        W = np.random.normal(0.0, 0.01, (X.shape[1], self.output_dim))
+        # b = np.random.randn(self.output_dim)
+        b = np.zeros(self.output_dim)
 
         return np.dot(X, W) + b
 
@@ -247,6 +251,7 @@ class SoftmaxLayer:
         # self.output = exp / np.sum(exp, axis=1, keepdims=True)
         # return exp / np.sum(exp, axis=1, keepdims=True)
 
+        print(X)
          # stable softmax
         N = X.shape[0]
         X = X - np.max(X, axis=1, keepdims=True)
@@ -403,22 +408,22 @@ if __name__ == '__main__':
     layers = build_model()
     
     # train model for first batch
-    # batch_x, batch_y = batches[0]
-    # for layer in layers:
-    #     # print("input shape: ", batch_x.shape)
-    #     # print_g(layer)
-    #     batch_x = layer.forward(batch_x)
-    #     # print_m(f"output shape: {batch_x.shape}")
-    # y_hat = batch_x
-    # print(y_hat)
+    batch_x, batch_y = batches[0]
+    for layer in layers:
+        print("input shape: ", batch_x.shape)
+        print_g(layer)
+        batch_x = layer.forward(batch_x)
+        print_m(f"output shape: {batch_x.shape}")
+    y_hat = batch_x
+    print(y_hat)
     # print_m(batch_y)
     # print(cross_entropy_loss(batch_y, y_hat))
     
 
     # # train model
-    for batch in batches:
-        X, y = batch
-        y_hat = forward_pass(X, layers)
+    # for batch in batches:
+    #     X, y = batch
+    #     y_hat = forward_pass(X, layers)
         # y_new = 
             # run backward
             # dL_dout = layer.backward(X, y_hat)
